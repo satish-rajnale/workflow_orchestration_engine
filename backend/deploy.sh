@@ -7,11 +7,7 @@ set -e
 
 echo "🚀 Starting Railway deployment preparation..."
 
-# Check if Railway CLI is installed
-if ! command -v railway &> /dev/null; then
-    echo "❌ Railway CLI not found. Installing..."
-    npm install -g @railway/cli
-fi
+
 
 # Check if user is logged in
 if ! railway whoami &> /dev/null; then
