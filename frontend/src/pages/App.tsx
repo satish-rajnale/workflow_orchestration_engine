@@ -17,7 +17,6 @@ export default function App() {
           <nav className="flex gap-4 items-center">
             <Link to="/">Dashboard</Link>
             <Link to="/builder">Builder</Link>
-            <Link to="/tickets">Tickets</Link>
             {token ? (
               <button
                 className="px-3 py-1 bg-gray-100 rounded"

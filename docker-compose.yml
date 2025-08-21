@@ -29,15 +29,15 @@ services:
     depends_on:
       - db
       - redis
-  frontend:
-    build: ./frontend
-    ports:
-      - "3000:3000"
-    environment:
-      VITE_API_BASE_URL: http://localhost:8000
-    volumes:
-      - ./frontend:/usr/src/app
-    depends_on:
-      - backend
+  # frontend:
+  #   build: ./frontend
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     VITE_API_BASE_URL: http://localhost:8000
+  #   volumes:
+  #     - ./frontend:/usr/src/app
+  #   depends_on:
+  #     - backend
 volumes:
   db_data:

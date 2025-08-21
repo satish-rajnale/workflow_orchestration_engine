@@ -5,7 +5,7 @@ import useAuth from '../store/auth'
 
 export default function Login() {
   const navigate = useNavigate()
-  const { setToken } = useAuth()
+  const { setToken, setUser } = useAuth();
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -16,6 +16,7 @@ export default function Login() {
     try {
       const res = await api.post('/auth/login', { email, password })
       setToken(res.data.access_token)
+      setUser(res.data.user);
       navigate('/')
     } catch (e: any) {
       setError(e?.response?.data?.detail || 'Login failed')

@@ -7,6 +7,8 @@ import {
   useEdgesState,
   useNodesState,
   type Node,
+  Handle,
+  Position,
 } from "@xyflow/react";
 import { useParams, useNavigate } from "react-router-dom";
 import api from "../services/api";
@@ -14,6 +16,242 @@ import "@xyflow/react/dist/style.css";
 import { useWorkflowExecution } from "../hooks/useWorkflowExecution";
 import { eventBus } from "../services/eventBus";
 import ErrorBoundary from "../components/ErrorBoundary";
+import EmailStatus from "../components/EmailStatus";
+import JobStatus from "../components/JobStatus";
+import useAuth from "../store/auth";
+import WorkflowHeader from "../components/WorkflowHeader";
+import LeftSidebar from "../components/LeftSidebar";
+import StepConfigPanel from "../components/StepConfigPanel";
+
+// Custom Node Component with Icons
+const CustomNode = ({ data }: { data: any }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [stepName, setStepName] = useState(
+    data.label || data.step?.id || "New Step"
+  );
+
+  const getIcon = (action: string) => {
+    switch (action) {
+      case "start":
+        return (
+          <svg
+            className="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M13 10V3L4 14h7v7l9-11h-7z"
+            />
+          </svg>
+        );
+      case "delay":
+        return (
+          <svg
+            className="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
+          </svg>
+        );
+      case "notify":
+        return (
+          <svg
+            className="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M15 17h5l-5 5v-5zM4.19 4.19A2 2 0 004 6v12a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-1.81 1.19z"
+            />
+          </svg>
+        );
+      case "http_request":
+        return (
+          <svg
+            className="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M13 10V3L4 14h7v7l9-11h-7z"
+            />
+          </svg>
+        );
+      case "branch":
+        return (
+          <svg
+            className="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
+          </svg>
+        );
+      case "email":
+        return (
+          <svg
+            className="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+            />
+          </svg>
+        );
+      case "check_ticket_assigned":
+        return (
+          <svg
+            className="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
+          </svg>
+        );
+      default:
+        return (
+          <svg
+            className="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+            />
+          </svg>
+        );
+    }
+  };
+
+  const getStepColor = (action: string) => {
+    switch (action) {
+      case "start":
+        return "bg-green-500";
+      case "delay":
+        return "bg-yellow-500";
+      case "notify":
+        return "bg-blue-500";
+      case "http_request":
+        return "bg-purple-500";
+      case "branch":
+        return "bg-orange-500";
+      case "email":
+        return "bg-indigo-500";
+      case "check_ticket_assigned":
+        return "bg-red-500";
+      default:
+        return "bg-gray-500";
+    }
+  };
+
+  const handleNameChange = (newName: string) => {
+    setStepName(newName);
+    console.log("handleNameChange", data.id, newName);
+    data.onStepNameChange?.(data.id, newName);
+    setIsEditing(false);
+  };
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg shadow-sm min-w-[200px]">
+      <Handle type="target" position={Position.Top} className="w-3 h-3" />
+
+      <div className="p-4">
+        <div className="flex items-center gap-3 mb-3">
+          <div
+            className={`p-2 rounded-lg ${getStepColor(
+              data.step?.action || data.action
+            )} text-white`}
+          >
+            {getIcon(data.step?.action || data.action)}
+          </div>
+          <div className="flex-1">
+            {isEditing ? (
+              <input
+                type="text"
+                value={stepName}
+                onChange={(e) => setStepName(e.target.value)}
+                onBlur={() => handleNameChange(stepName)}
+                onKeyPress={(e) =>
+                  e.key === "Enter" && handleNameChange(stepName)
+                }
+                className="w-full text-sm font-medium border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                autoFocus
+              />
+            ) : (
+              <div
+                className="text-sm font-medium text-gray-900 cursor-pointer hover:bg-gray-50 px-2 py-1 rounded"
+                onClick={() => setIsEditing(true)}
+              >
+                {stepName}
+              </div>
+            )}
+            <div className="text-xs text-gray-500 capitalize">
+              {data.step?.action?.replace(/_/g, " ") ||
+                data.action?.replace(/_/g, " ")}
+            </div>
+          </div>
+        </div>
+
+        {data.step?.params && Object.keys(data.step.params).length > 0 && (
+          <div className="text-xs text-gray-600 bg-gray-50 p-2 rounded">
+            {Object.entries(data.step.params).map(([key, value]) => (
+              <div key={key} className="flex justify-between">
+                <span className="font-medium">{key}:</span>
+                <span className="truncate ml-2">{String(value)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <Handle type="source" position={Position.Bottom} className="w-3 h-3" />
+    </div>
+  );
+};
+
+const nodeTypes = {
+  custom: CustomNode,
+};
 
 export default function Builder() {
   const [triggers, setTriggers] = useState<any[]>([]);
@@ -24,7 +262,7 @@ export default function Builder() {
   const [showDelayConfig, setShowDelayConfig] = useState(false);
   const [showEmailConfig, setShowEmailConfig] = useState(false);
   const [showHttpConfig, setShowHttpConfig] = useState(false);
-  const [showNodeEditor, setShowNodeEditor] = useState(false);
+  const [showStepEditor, setShowStepEditor] = useState(false);
   const [showEdgeEditor, setShowEdgeEditor] = useState(false);
   const [testPayload, setTestPayload] = useState("{}");
   const [isTesting, setIsTesting] = useState(false);
@@ -32,10 +270,13 @@ export default function Builder() {
   const params = useParams();
   const workflowId = params.id;
   const [name, setName] = useState("New Workflow");
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+  const [selectedStep, setSelectedStep] = useState<Node | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const { user } = useAuth();
+
+  console.log("user", user);
 
   useEffect(() => {
     if (!workflowId) return;
@@ -48,24 +289,14 @@ export default function Builder() {
       setNodes(
         (def.nodes || []).map((n: any) => ({
           id: n.id,
+          type: "custom",
           data: {
-            label: `${n.action}`,
-            node: n,
-            type: n.type || "action",
+            label: n.id,
+            step: n,
+            action: n.action,
+            onStepNameChange: handleStepNameChange,
           },
           position: n.position || { x: 100, y: 100 },
-          style: {
-            background:
-              n.type === "start"
-                ? "#10b981"
-                : n.type === "branch"
-                ? "#f59e0b"
-                : "#3b82f6",
-            color: "white",
-            border: "none",
-            borderRadius: "8px",
-            padding: "8px 12px",
-          },
         }))
       );
       setEdges(
@@ -73,10 +304,54 @@ export default function Builder() {
           id: `${e.source}-${e.target}`,
           source: e.source,
           target: e.target,
+          data: { condition: e.condition },
         }))
       );
     })();
   }, [workflowId]);
+
+  const handleStepNameChange = (stepId: string, newName: string) => {
+    setNodes((ns: any) =>
+      (ns as any[]).map((n: any) =>
+        n.id === stepId
+          ? {
+              ...n,
+              data: {
+                ...n.data,
+                label: newName,
+                step: {
+                  ...n.data.step,
+                  id: newName,
+                },
+              },
+            }
+          : n
+      )
+    );
+  };
+
+  const updateStepParams = (stepId: string, params: any) => {
+    console.log("updateStepParams", stepId, params);
+    setNodes((ns: any) =>
+      (ns as any[]).map((n: any) =>
+        n.id === stepId
+          ? {
+              ...n,
+              data: {
+                ...n.data,
+                step: {
+                  ...n.data.step,
+                  params: {
+                    ...n.data.step?.params,
+                    ...params,
+                  },
+                },
+              },
+            }
+          : n
+      )
+    );
+  };
 
   const onConnect = (connection: any) =>
     setEdges((eds) => addEdge(connection, eds));
@@ -85,10 +360,10 @@ export default function Builder() {
     const definition = {
       triggers: triggers,
       nodes: nodes.map((n) => ({
-        id: n.id,
-        type: n.type || "action",
-        action: n.data?.node?.action || n.data?.label || "notify",
-        params: n.data?.node?.params || {},
+        id: n.data.label || n.id,
+        type: n.data.step?.type || "action",
+        action: n.data.step?.action || n.data.action || "notify",
+        params: n.data.step?.params || {},
         position: n.position,
       })),
       edges: edges.map((e) => ({
@@ -117,6 +392,11 @@ export default function Builder() {
       message: `Workflow execution started for ${name}`,
       duration: 3000,
     });
+
+    // Trigger a refresh of job status after a short delay
+    // setTimeout(() => {
+    //   eventBus.publish("refresh-jobs", { workflowId });
+    // }, 1000);
   };
 
   const testWorkflow = async () => {
@@ -157,24 +437,14 @@ export default function Builder() {
         setNodes(
           (sample.definition.nodes || []).map((n: any) => ({
             id: n.id,
+            type: "custom",
             data: {
-              label: `${n.action}`,
-              node: n,
-              type: n.type || "action",
+              label: n.id,
+              step: n,
+              action: n.action,
+              onStepNameChange: handleStepNameChange,
             },
             position: n.position || { x: 100, y: 100 },
-            style: {
-              background:
-                n.type === "start"
-                  ? "#10b981"
-                  : n.type === "branch"
-                  ? "#f59e0b"
-                  : "#3b82f6",
-              color: "white",
-              border: "none",
-              borderRadius: "8px",
-              padding: "8px 12px",
-            },
           }))
         );
         setEdges(
@@ -195,30 +465,20 @@ export default function Builder() {
     }
   };
 
-  const addActionNode = (action: string) => {
-    const id = `${Date.now()}`;
-    const newNode = {
+  const addStep = (action: string) => {
+    const id = `step_${Date.now()}`;
+    const newStep = {
       id,
+      type: "custom",
       data: {
-        label: action,
-        node: { id, type: "action", action, params: {} },
-        type: "action",
+        label: id,
+        step: { id, type: "action", action, params: {} },
+        action: action,
+        onStepNameChange: handleStepNameChange,
       },
       position: { x: 100 + nodes.length * 30, y: 100 + nodes.length * 30 },
-      style: {
-        background:
-          action === "start"
-            ? "#10b981"
-            : action === "branch"
-            ? "#f59e0b"
-            : "#3b82f6",
-        color: "white",
-        border: "none",
-        borderRadius: "8px",
-        padding: "8px 12px",
-      },
     };
-    setNodes((ns) => [...ns, newNode]);
+    setNodes((ns) => [...ns, newStep]);
   };
 
   const generateSamplePayload = () => {
@@ -250,83 +510,153 @@ export default function Builder() {
 
   return (
     <ErrorBoundary>
-      <div className="space-y-12">
-        <div className="grid grid-cols-12 gap-4">
-          {/* Left Sidebar - Workflow, Sample Workflows, and Test Payload */}
-          <div className="col-span-3 space-y-3">
-            <div className="bg-white rounded shadow p-3">
-              <div className="font-semibold mb-2">Workflow</div>
+      <div className="h-screen flex flex-col bg-gray-50">
+        {/* Header */}
+        <div className="bg-white border-b border-gray-200 px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <h1 className="text-xl font-semibold text-gray-900">
+                Workflow Builder
+              </h1>
               <input
-                className="w-full border p-2 rounded"
+                className="text-lg font-medium border-none bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-2"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                placeholder="Workflow name"
               />
-              <div className="flex gap-2 mt-2">
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                onClick={save}
+              >
+                Save
+              </button>
+              <button
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                onClick={run}
+                disabled={!workflowId}
+              >
+                Run Workflow
+              </button>
+              {workflowId && (
                 <button
-                  className="px-3 py-1 bg-blue-600 text-white rounded"
-                  onClick={save}
-                >
-                  Save
-                </button>
-                <button
-                  className="px-3 py-1 bg-green-600 text-white rounded"
-                  onClick={run}
-                  disabled={!workflowId}
-                >
-                  Run
-                </button>
-                <button
-                  className="px-3 py-1 bg-purple-600 text-white rounded"
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
                   onClick={async () => {
-                    try {
-                      await api.post("/workflows/tickets", {
-                        title: "Test Support Ticket",
-                        description:
-                          "This is a test ticket to trigger workflows",
-                      });
-                      setMessage("Test ticket created!");
-                      setTimeout(() => setMessage(null), 2000);
-                    } catch (e) {
-                      setMessage("Failed to create test ticket");
-                      setTimeout(() => setMessage(null), 2000);
+                    if (
+                      window.confirm(
+                        "Are you sure you want to delete this workflow? This action cannot be undone."
+                      )
+                    ) {
+                      try {
+                        await api.delete(`/workflows/${workflowId}`);
+                        setMessage("Workflow deleted successfully!");
+                        setTimeout(() => {
+                          navigate("/");
+                        }, 1500);
+                      } catch (e: any) {
+                        setMessage("Failed to delete workflow");
+                        setTimeout(() => setMessage(null), 2000);
+                      }
                     }
                   }}
                 >
-                  Create Test Ticket
+                  Delete Workflow
                 </button>
-              </div>
-              {message && (
-                <div className="text-sm text-green-700 mt-2">{message}</div>
               )}
             </div>
+          </div>
+          {message && (
+            <div className="mt-2 text-sm text-green-600">{message}</div>
+          )}
+        </div>
 
-            <div className="bg-white rounded shadow p-3">
-              <div className="font-semibold mb-2">Sample Workflows</div>
+        <div className="flex-1 flex">
+          {/* Left Sidebar */}
+          <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
+            {/* Sample Workflows */}
+            <div className="p-4 border-b border-gray-200">
+              <h3 className="text-sm font-medium text-gray-900 mb-3">
+                Sample Workflows
+              </h3>
               <div className="space-y-2">
                 <button
-                  className="w-full px-2 py-1 bg-green-100 text-green-700 rounded text-sm"
+                  className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg"
                   onClick={() => loadSample("Lead Nurture")}
                 >
-                  Load Lead Nurture
+                  Lead Nurture
                 </button>
                 <button
-                  className="w-full px-2 py-1 bg-green-100 text-green-700 rounded text-sm"
+                  className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg"
                   onClick={() => loadSample("Temperature Control")}
                 >
-                  Load Temperature Control
+                  Temperature Control
                 </button>
                 <button
-                  className="w-full px-2 py-1 bg-green-100 text-green-700 rounded text-sm"
+                  className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg"
                   onClick={() => loadSample("Support Ticket Auto-Responder")}
                 >
-                  Load Support Ticket Auto-Responder
+                  Support Ticket Auto-Responder
                 </button>
               </div>
             </div>
 
-            {/* Test Payload Container */}
-            <div className="bg-white rounded shadow p-3">
-              <div className="font-semibold mb-2">Test Payload</div>
+            {/* Add Steps */}
+            <div className="p-4 border-b border-gray-200">
+              <h3 className="text-sm font-medium text-gray-900 mb-3">
+                Add Steps
+              </h3>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  className="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                  onClick={() => addStep("start")}
+                >
+                  Start
+                </button>
+                <button
+                  className="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                  onClick={() => addStep("delay")}
+                >
+                  Delay
+                </button>
+                <button
+                  className="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                  onClick={() => addStep("notify")}
+                >
+                  Notify
+                </button>
+                <button
+                  className="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                  onClick={() => addStep("http_request")}
+                >
+                  HTTP Request
+                </button>
+                <button
+                  className="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                  onClick={() => addStep("branch")}
+                >
+                  Branch
+                </button>
+                <button
+                  className="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                  onClick={() => addStep("email")}
+                >
+                  Email
+                </button>
+                <button
+                  className="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                  onClick={() => addStep("check_ticket_assigned")}
+                >
+                  Check Ticket
+                </button>
+              </div>
+            </div>
+
+            {/* Test Payload */}
+            <div className="p-4 border-b border-gray-200">
+              <h3 className="text-sm font-medium text-gray-900 mb-3">
+                Test Payload
+              </h3>
               <div className="space-y-2">
                 <div className="flex gap-2">
                   <button
@@ -344,24 +674,67 @@ export default function Builder() {
                     onClick={testWorkflow}
                     disabled={isTesting || !workflowId}
                   >
-                    {isTesting ? "Testing..." : "Test Workflow"}
+                    {isTesting ? "Testing..." : "Test"}
                   </button>
                 </div>
                 <textarea
-                  className="w-full border p-2 rounded text-xs h-32 font-mono"
+                  className="w-full border p-2 rounded text-xs h-24 font-mono"
                   placeholder="Enter JSON payload for testing..."
                   value={testPayload}
                   onChange={(e) => setTestPayload(e.target.value)}
                 />
-                <div className="text-xs text-gray-500">
-                  Use this to test your workflow with custom data
+              </div>
+            </div>
+
+            {/* Selected Step Debug */}
+            {selectedStep && (
+              <div className="p-4 border-b border-gray-200">
+                <h3 className="text-sm font-medium text-gray-900 mb-3">
+                  Selected Step Data
+                </h3>
+                <div className="text-xs font-mono bg-gray-50 p-2 rounded max-h-32 overflow-auto">
+                  <pre>{JSON.stringify(selectedStep.data, null, 2)}</pre>
                 </div>
+              </div>
+            )}
+
+            {/* Triggers */}
+            <div className="p-4 flex-1">
+              <h3 className="text-sm font-medium text-gray-900 mb-3">
+                Triggers
+              </h3>
+              <button
+                className="w-full px-3 py-2 text-sm bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200"
+                onClick={() => setShowTriggerEditor(true)}
+              >
+                + Add Trigger
+              </button>
+              <div className="mt-3 space-y-2">
+                {triggers.map((t, i) => (
+                  <div
+                    key={i}
+                    className="p-2 bg-gray-50 rounded text-xs relative"
+                  >
+                    <button
+                      className="absolute top-1 right-1 text-red-500 hover:text-red-700"
+                      onClick={() =>
+                        setTriggers(triggers.filter((_, index) => index !== i))
+                      }
+                    >
+                      ×
+                    </button>
+                    <div className="font-medium">{t.event}</div>
+                    <div className="text-gray-600">
+                      {JSON.stringify(t.condition)}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
 
-          {/* Center - ReactFlow Canvas */}
-          <div className="col-span-6 bg-white rounded shadow h-[70vh]">
+          {/* Main Canvas */}
+          <div className="flex-1">
             <ReactFlow
               nodes={nodes}
               edges={edges}
@@ -369,155 +742,104 @@ export default function Builder() {
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
               onSelectionChange={(sel: any) => {
-                setSelectedNode(sel.nodes?.[0] || null);
+                setSelectedStep(sel.nodes?.[0] || null);
                 setSelectedEdge(sel.edges?.[0] || null);
               }}
+              nodeTypes={nodeTypes}
+              fitView
             >
               <Background />
               <Controls />
             </ReactFlow>
           </div>
 
-          {/* Right Sidebar - Other Containers */}
-          <div className="col-span-3 space-y-3">
-            <div className="bg-white rounded shadow p-3">
-              <div className="font-semibold mb-2">Triggers</div>
-              <button
-                className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-sm"
-                onClick={() => setShowTriggerEditor(true)}
-              >
-                + Add Trigger
-              </button>
-              {triggers.map((t, i) => (
-                <div
-                  key={i}
-                  className="mt-2 p-2 bg-gray-50 rounded text-xs relative"
-                >
-                  <button
-                    className="absolute top-1 right-1 text-red-500 hover:text-red-700"
-                    onClick={() =>
-                      setTriggers(triggers.filter((_, index) => index !== i))
-                    }
-                  >
-                    ×
-                  </button>
-                  Event: {t.event}
-                  <br />
-                  Condition: {JSON.stringify(t.condition)}
-                </div>
-              ))}
-            </div>
-            <div className="bg-white rounded shadow p-3">
-              <div className="font-semibold mb-2">Add node</div>
-              <div className="flex gap-2 flex-wrap">
-                <button
-                  className="px-2 py-1 bg-gray-100 rounded"
-                  onClick={() => addActionNode("start")}
-                >
-                  Start
-                </button>
-                <button
-                  className="px-2 py-1 bg-gray-100 rounded"
-                  onClick={() => addActionNode("delay")}
-                >
-                  Delay
-                </button>
-                <button
-                  className="px-2 py-1 bg-gray-100 rounded"
-                  onClick={() => addActionNode("notify")}
-                >
-                  Notify
-                </button>
-                <button
-                  className="px-2 py-1 bg-gray-100 rounded"
-                  onClick={() => addActionNode("http_request")}
-                >
-                  HTTP
-                </button>
-                <button
-                  className="px-2 py-1 bg-gray-100 rounded"
-                  onClick={() => addActionNode("branch")}
-                >
-                  Branch
-                </button>
-                <button
-                  className="px-2 py-1 bg-gray-100 rounded"
-                  onClick={() => addActionNode("email")}
-                >
-                  Email
-                </button>
-                <button
-                  className="px-2 py-1 bg-gray-100 rounded"
-                  onClick={() => addActionNode("check_ticket_assigned")}
-                >
-                  Check Ticket
-                </button>
-              </div>
-            </div>
-            {selectedNode && (
-              <div className="bg-white rounded shadow p-3">
-                <div className="font-semibold">Node config</div>
-                <div className="text-sm text-gray-600">
-                  id: {selectedNode.id}
-                </div>
-                <div className="space-y-2 mt-2">
+          {/* Right Sidebar */}
+          <div className="w-80 bg-white border-l border-gray-200 p-4">
+            {selectedStep ? (
+              <div>
+                <h3 className="text-sm font-medium text-gray-900 mb-4">
+                  Step Configuration
+                </h3>
+                <div className="space-y-4">
                   <div>
-                    <label className="text-xs text-gray-600">Action</label>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Step ID
+                    </label>
                     <input
-                      className="w-full border p-2 rounded text-sm"
-                      value={
-                        selectedNode.data?.node?.action ||
-                        selectedNode.data?.label
-                      }
+                      className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                      value={selectedStep.data.label || selectedStep.id}
                       onChange={(e) =>
-                        // @ts-ignore
+                        handleStepNameChange(selectedStep.id, e.target.value)
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Action
+                    </label>
+                    <select
+                      className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                      value={
+                        selectedStep.data.step?.action ||
+                        selectedStep.data.action
+                      }
+                      onChange={(e) => {
                         setNodes((ns) =>
                           ns.map((n) =>
-                            n.id === selectedNode.id
+                            n.id === selectedStep.id
                               ? {
                                   ...n,
                                   data: {
                                     ...n.data,
-                                    node: {
-                                      ...n.data?.node,
+                                    step: {
+                                      ...n.data.step,
                                       action: e.target.value,
                                     },
+                                    action: e.target.value,
                                   },
                                 }
                               : n
                           )
-                        )
-                      }
-                    />
+                        );
+                      }}
+                    >
+                      <option value="start">Start</option>
+                      <option value="delay">Delay</option>
+                      <option value="notify">Notify</option>
+                      <option value="http_request">HTTP Request</option>
+                      <option value="branch">Branch</option>
+                      <option value="email">Email</option>
+                      <option value="check_ticket_assigned">
+                        Check Ticket
+                      </option>
+                    </select>
                   </div>
-
-                  {/* Delay Node Configuration */}
-                  {selectedNode.data?.node?.action === "delay" && (
-                    <div className="space-y-2">
+                  ;{/* Step-specific configuration */}
+                  {(selectedStep.data.step?.action ||
+                    selectedStep.data.action) === "delay" ? (
+                    <div className="space-y-3">
                       <div>
-                        <label className="text-xs text-gray-600">
-                          Delay (minutes)
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Delay (seconds)
                         </label>
                         <input
                           type="number"
-                          className="w-full border p-2 rounded text-sm"
-                          value={Math.round(
-                            (selectedNode.data?.node?.params?.seconds || 0) / 60
-                          )}
+                          min="1"
+                          className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          value={selectedStep.data.step?.params?.seconds || 5}
                           onChange={(e) => {
-                            const minutes = parseInt(e.target.value) || 0;
-                            const seconds = minutes * 60;
+                            const seconds = parseInt(e.target.value) || 5;
                             setNodes((ns) =>
                               ns.map((n) =>
-                                n.id === selectedNode.id
+                                n.id === selectedStep.id
                                   ? {
                                       ...n,
                                       data: {
                                         ...n.data,
-                                        node: {
-                                          ...n.data?.node,
+                                        step: {
+                                          ...n.data.step,
                                           params: {
-                                            ...n.data?.node?.params,
+                                            ...n.data.step?.params,
                                             seconds,
                                           },
                                         },
@@ -527,132 +849,53 @@ export default function Builder() {
                               )
                             );
                           }}
+                          placeholder="5"
                         />
                       </div>
+                      <div className="text-xs text-gray-500">
+                        Delay execution for the specified number of seconds
+                      </div>
                     </div>
-                  )}
-
-                  {/* Email Node Configuration */}
-                  {selectedNode.data?.node?.action === "email" && (
-                    <div className="space-y-2">
+                  ) : null}
+                  {(selectedStep.data.step?.action ||
+                    selectedStep.data.action) === "email" && (
+                    <div className="space-y-3">
                       <div>
-                        <label className="text-xs text-gray-600">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
                           To Email
                         </label>
                         <input
-                          className="w-full border p-2 rounded text-sm"
-                          value={selectedNode.data?.node?.params?.to || ""}
+                          type="email"
+                          className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          value={selectedStep.data.step?.params?.to || ""}
                           onChange={(e) =>
-                            setNodes((ns) =>
-                              ns.map((n) =>
-                                n.id === selectedNode.id
-                                  ? {
-                                      ...n,
-                                      data: {
-                                        ...n.data,
-                                        node: {
-                                          ...n.data?.node,
-                                          params: {
-                                            ...n.data?.node?.params,
-                                            to: e.target.value,
-                                          },
-                                        },
-                                      },
-                                    }
-                                  : n
-                              )
-                            )
+                            updateStepParams(selectedStep.id, {
+                              to: e.target.value,
+                            })
                           }
+                          placeholder="Enter email address"
                         />
                       </div>
                       <div>
-                        <label className="text-xs text-gray-600">
-                          From Email (Optional)
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Subject
                         </label>
                         <input
-                          className="w-full border p-2 rounded text-sm"
-                          value={selectedNode.data?.node?.params?.from || ""}
+                          type="text"
+                          className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          value={selectedStep.data.step?.params?.subject || ""}
                           onChange={(e) =>
                             setNodes((ns) =>
                               ns.map((n) =>
-                                n.id === selectedNode.id
+                                n.id === selectedStep.id
                                   ? {
                                       ...n,
                                       data: {
                                         ...n.data,
-                                        node: {
-                                          ...n.data?.node,
+                                        step: {
+                                          ...n.data.step,
                                           params: {
-                                            ...n.data?.node?.params,
-                                            from: e.target.value,
-                                          },
-                                        },
-                                      },
-                                    }
-                                  : n
-                              )
-                            )
-                          }
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs text-gray-600">
-                          Template
-                        </label>
-                        <select
-                          className="w-full border p-2 rounded text-sm"
-                          value={
-                            selectedNode.data?.node?.params?.template || ""
-                          }
-                          onChange={(e) =>
-                            setNodes((ns) =>
-                              ns.map((n) =>
-                                n.id === selectedNode.id
-                                  ? {
-                                      ...n,
-                                      data: {
-                                        ...n.data,
-                                        node: {
-                                          ...n.data?.node,
-                                          params: {
-                                            ...n.data?.node?.params,
-                                            template: e.target.value,
-                                          },
-                                        },
-                                      },
-                                    }
-                                  : n
-                              )
-                            )
-                          }
-                        >
-                          <option value="">Select template</option>
-                          <option value="ack_ticket">
-                            Ticket Acknowledgment
-                          </option>
-                          <option value="escalate_ticket">
-                            Ticket Escalation
-                          </option>
-                          <option value="custom">Custom Template</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-xs text-gray-600">Subject</label>
-                        <input
-                          className="w-full border p-2 rounded text-sm"
-                          value={selectedNode.data?.node?.params?.subject || ""}
-                          onChange={(e) =>
-                            setNodes((ns) =>
-                              ns.map((n) =>
-                                n.id === selectedNode.id
-                                  ? {
-                                      ...n,
-                                      data: {
-                                        ...n.data,
-                                        node: {
-                                          ...n.data?.node,
-                                          params: {
-                                            ...n.data?.node?.params,
+                                            ...n.data.step?.params,
                                             subject: e.target.value,
                                           },
                                         },
@@ -662,27 +905,28 @@ export default function Builder() {
                               )
                             )
                           }
+                          placeholder="Enter email subject"
                         />
                       </div>
                       <div>
-                        <label className="text-xs text-gray-600">
-                          Message Body
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Body
                         </label>
                         <textarea
-                          className="w-full border p-2 rounded text-sm h-20"
-                          value={selectedNode.data?.node?.params?.body || ""}
+                          className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          value={selectedStep.data.step?.params?.body || ""}
                           onChange={(e) =>
                             setNodes((ns) =>
                               ns.map((n) =>
-                                n.id === selectedNode.id
+                                n.id === selectedStep.id
                                   ? {
                                       ...n,
                                       data: {
                                         ...n.data,
-                                        node: {
-                                          ...n.data?.node,
+                                        step: {
+                                          ...n.data.step,
                                           params: {
-                                            ...n.data?.node?.params,
+                                            ...n.data.step?.params,
                                             body: e.target.value,
                                           },
                                         },
@@ -692,92 +936,44 @@ export default function Builder() {
                               )
                             )
                           }
-                          placeholder="Enter custom message body or use template variables like {{ticket.title}}, {{user.name}}"
+                          placeholder="Enter email body"
+                          rows={3}
                         />
                       </div>
-                      <div>
-                        <label className="text-xs text-gray-600">
-                          CC (comma separated)
-                        </label>
-                        <input
-                          className="w-full border p-2 rounded text-sm"
-                          value={selectedNode.data?.node?.params?.cc || ""}
-                          onChange={(e) =>
-                            setNodes((ns) =>
-                              ns.map((n) =>
-                                n.id === selectedNode.id
-                                  ? {
-                                      ...n,
-                                      data: {
-                                        ...n.data,
-                                        node: {
-                                          ...n.data?.node,
-                                          params: {
-                                            ...n.data?.node?.params,
-                                            cc: e.target.value,
-                                          },
-                                        },
-                                      },
-                                    }
-                                  : n
-                              )
-                            )
-                          }
-                        />
-                      </div>
+
+                      {/* Email Status Component */}
+                      <EmailStatus
+                        emailId={selectedStep.data.step?.params?.last_email_id}
+                        executionId={
+                          selectedStep.data.step?.params?.execution_id
+                        }
+                      />
                     </div>
                   )}
-
-                  {/* HTTP Request Node Configuration */}
-                  {selectedNode.data?.node?.action === "http_request" && (
-                    <div className="space-y-2">
+                  {(selectedStep.data.step?.action ||
+                    selectedStep.data.action) === "http_request" && (
+                    <div className="space-y-3">
                       <div>
-                        <label className="text-xs text-gray-600">URL</label>
-                        <input
-                          className="w-full border p-2 rounded text-sm"
-                          value={selectedNode.data?.node?.params?.url || ""}
-                          onChange={(e) =>
-                            setNodes((ns) =>
-                              ns.map((n) =>
-                                n.id === selectedNode.id
-                                  ? {
-                                      ...n,
-                                      data: {
-                                        ...n.data,
-                                        node: {
-                                          ...n.data?.node,
-                                          params: {
-                                            ...n.data?.node?.params,
-                                            url: e.target.value,
-                                          },
-                                        },
-                                      },
-                                    }
-                                  : n
-                              )
-                            )
-                          }
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs text-gray-600">Method</label>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Method
+                        </label>
                         <select
-                          className="w-full border p-2 rounded text-sm"
+                          className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                           value={
-                            selectedNode.data?.node?.params?.method || "GET"
+                            selectedStep.data.step?.params?.method || "GET"
                           }
                           onChange={(e) =>
                             setNodes((ns) =>
                               ns.map((n) =>
-                                n.id === selectedNode.id
+                                n.id === selectedStep.id
                                   ? {
                                       ...n,
                                       data: {
                                         ...n.data,
-                                        node: {
-                                          ...n.data?.node,
+                                        step: {
+                                          ...n.data.step,
                                           params: {
-                                            ...n.data?.node?.params,
+                                            ...n.data.step?.params,
                                             method: e.target.value,
                                           },
                                         },
@@ -792,16 +988,49 @@ export default function Builder() {
                           <option value="POST">POST</option>
                           <option value="PUT">PUT</option>
                           <option value="DELETE">DELETE</option>
+                          <option value="PATCH">PATCH</option>
                         </select>
                       </div>
                       <div>
-                        <label className="text-xs text-gray-600">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          URL
+                        </label>
+                        <input
+                          type="url"
+                          className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          value={selectedStep.data.step?.params?.url || ""}
+                          onChange={(e) =>
+                            setNodes((ns) =>
+                              ns.map((n) =>
+                                n.id === selectedStep.id
+                                  ? {
+                                      ...n,
+                                      data: {
+                                        ...n.data,
+                                        step: {
+                                          ...n.data.step,
+                                          params: {
+                                            ...n.data.step?.params,
+                                            url: e.target.value,
+                                          },
+                                        },
+                                      },
+                                    }
+                                  : n
+                              )
+                            )
+                          }
+                          placeholder="https://api.example.com/endpoint"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
                           Headers (JSON)
                         </label>
                         <textarea
-                          className="w-full border p-2 rounded text-xs h-16"
+                          className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
                           value={JSON.stringify(
-                            selectedNode.data?.node?.params?.headers || {},
+                            selectedStep.data.step?.params?.headers || {},
                             null,
                             2
                           )}
@@ -810,15 +1039,15 @@ export default function Builder() {
                               const headers = JSON.parse(e.target.value);
                               setNodes((ns) =>
                                 ns.map((n) =>
-                                  n.id === selectedNode.id
+                                  n.id === selectedStep.id
                                     ? {
                                         ...n,
                                         data: {
                                           ...n.data,
-                                          node: {
-                                            ...n.data?.node,
+                                          step: {
+                                            ...n.data.step,
                                             params: {
-                                              ...n.data?.node?.params,
+                                              ...n.data.step?.params,
                                               headers,
                                             },
                                           },
@@ -830,16 +1059,17 @@ export default function Builder() {
                             } catch {}
                           }}
                           placeholder='{"Content-Type": "application/json"}'
+                          rows={3}
                         />
                       </div>
                       <div>
-                        <label className="text-xs text-gray-600">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
                           Body (JSON)
                         </label>
                         <textarea
-                          className="w-full border p-2 rounded text-xs h-16"
+                          className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
                           value={JSON.stringify(
-                            selectedNode.data?.node?.params?.body || {},
+                            selectedStep.data.step?.params?.body || {},
                             null,
                             2
                           )}
@@ -848,15 +1078,15 @@ export default function Builder() {
                               const body = JSON.parse(e.target.value);
                               setNodes((ns) =>
                                 ns.map((n) =>
-                                  n.id === selectedNode.id
+                                  n.id === selectedStep.id
                                     ? {
                                         ...n,
                                         data: {
                                           ...n.data,
-                                          node: {
-                                            ...n.data?.node,
+                                          step: {
+                                            ...n.data.step,
                                             params: {
-                                              ...n.data?.node?.params,
+                                              ...n.data.step?.params,
                                               body,
                                             },
                                           },
@@ -868,111 +1098,148 @@ export default function Builder() {
                             } catch {}
                           }}
                           placeholder='{"key": "value"}'
+                          rows={3}
                         />
                       </div>
                     </div>
                   )}
-
+                  {(selectedStep.data.step?.action ||
+                    selectedStep.data.action) === "notify" && (
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Message
+                        </label>
+                        <textarea
+                          className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          value={selectedStep.data.step?.params?.message || ""}
+                          onChange={(e) =>
+                            setNodes((ns) =>
+                              ns.map((n) =>
+                                n.id === selectedStep.id
+                                  ? {
+                                      ...n,
+                                      data: {
+                                        ...n.data,
+                                        step: {
+                                          ...n.data.step,
+                                          params: {
+                                            ...n.data.step?.params,
+                                            message: e.target.value,
+                                          },
+                                        },
+                                      },
+                                    }
+                                  : n
+                              )
+                            )
+                          }
+                          placeholder="Enter notification message"
+                          rows={3}
+                        />
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        This step will log a notification message during
+                        workflow execution
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : selectedEdge ? (
+              <div>
+                <h3 className="text-sm font-medium text-gray-900 mb-4">
+                  Edge Condition
+                </h3>
+                <div className="space-y-3">
+                  <div className="text-xs text-gray-600">
+                    From {selectedEdge.source} to {selectedEdge.target}
+                  </div>
                   <div>
-                    <label className="text-xs text-gray-600">Retries</label>
-                    <input
-                      type="number"
-                      className="w-full border p-2 rounded text-sm"
-                      value={selectedNode.data?.node?.retries || 0}
-                      onChange={(e) =>
-                        setNodes((ns) =>
-                          ns.map((n) =>
-                            n.id === selectedNode.id
-                              ? {
-                                  ...n,
-                                  data: {
-                                    ...n.data,
-                                    node: {
-                                      ...n.data?.node,
-                                      retries: parseInt(e.target.value) || 0,
-                                    },
-                                  },
-                                }
-                              : n
-                          )
-                        )
-                      }
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Condition (JSON)
+                    </label>
+                    <textarea
+                      className="w-full border border-gray-300 rounded px-3 py-2 text-xs h-20 font-mono"
+                      value={JSON.stringify(
+                        selectedEdge.data?.condition || {},
+                        null,
+                        2
+                      )}
+                      onChange={(e) => {
+                        try {
+                          const condition = JSON.parse(e.target.value);
+                          setEdges((es) =>
+                            es.map((edge) =>
+                              edge.id === selectedEdge.id
+                                ? { ...edge, data: { ...edge.data, condition } }
+                                : edge
+                            )
+                          );
+                        } catch {}
+                      }}
                     />
                   </div>
                 </div>
               </div>
-            )}
-            {selectedEdge && (
-              <div className="bg-white rounded shadow p-3">
-                <div className="font-semibold">Edge Condition</div>
-                <div className="text-sm text-gray-600">
-                  From {selectedEdge.source} to {selectedEdge.target}
-                </div>
-                <div className="mt-2">
-                  <label className="text-xs text-gray-600">
-                    Condition (JSON)
-                  </label>
-                  <textarea
-                    className="w-full border p-2 rounded text-xs h-20"
-                    value={JSON.stringify(
-                      selectedEdge.data?.condition || {},
-                      null,
-                      2
-                    )}
-                    onChange={(e) => {
-                      try {
-                        const condition = JSON.parse(e.target.value);
-                        setEdges((es) =>
-                          es.map((edge) =>
-                            edge.id === selectedEdge.id
-                              ? { ...edge, data: { ...edge.data, condition } }
-                              : edge
-                          )
-                        );
-                      } catch {}
-                    }}
-                  />
-                </div>
-              </div>
-            )}
+            ) : (
+              <div>
+                <h3 className="text-sm font-medium text-gray-900 mb-4">
+                  Workflow Status
+                </h3>
 
-            {/* <div className="bg-white rounded shadow p-3">
-              <div className="font-semibold mb-2">Live logs</div>
-              <div className="h-40 overflow-auto text-xs font-mono">
-                {logs.map((l, i) => (
-                  <div key={i}>{JSON.stringify(l)}</div>
-                ))}
+                <div className="mt-4 text-center text-gray-500">
+                  <div className="w-12 h-12 mx-auto mb-3 bg-gray-100 rounded-lg flex items-center justify-center">
+                    <svg
+                      className="w-6 h-6"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                      />
+                    </svg>
+                  </div>
+                  <p className="text-sm">
+                    Select a step or connection to configure
+                  </p>
+                </div>
+                {/* Job Status Component */}
+                <JobStatus
+                  workflowId={workflowId ? parseInt(workflowId) : undefined}
+                  userId={user?.id?.toString()}
+                />
               </div>
-            </div> */}
+            )}
           </div>
         </div>
-        {/* Live Logs - Horizontal Layout */}
-        <div className="bg-white rounded shadow p-4">
-          <div className="flex justify-between items-center mb-3">
-            <div className="font-semibold">Live Execution Logs</div>
+
+        {/* Live Logs */}
+        <div className="h-48 bg-white border-t border-gray-200">
+          <div className="flex items-center justify-between p-4 border-b border-gray-200">
+            <h3 className="text-sm font-medium text-gray-900">
+              Execution Logs
+            </h3>
             <button
-              className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-sm hover:bg-gray-200"
+              className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
               onClick={() => setLogs([])}
             >
-              Clear Logs
+              Clear
             </button>
           </div>
-          <div
-            className="h-32 overflow-auto text-xs font-mono bg-gray-50 p-3 rounded border"
-            ref={(el) => {
-              if (el && logs.length > 0) {
-                el.scrollTop = el.scrollHeight;
-              }
-            }}
-          >
+          <div className="h-32 overflow-auto p-4">
             {logs.length === 0 ? (
-              <div className="text-gray-500">
+              <div className="text-center text-gray-500 text-sm">
                 No execution logs yet. Run a workflow to see live updates.
               </div>
             ) : (
               <div className="space-y-1">
                 {logs.map((l, i) => (
-                  <div key={i} className="flex items-center space-x-2">
+                  <div key={i} className="flex items-center space-x-2 text-xs">
                     <span className="text-gray-400">
                       [
                       {l.timestamp
@@ -981,26 +1248,19 @@ export default function Builder() {
                       ]
                     </span>
                     <span
-                      className={`px-2 py-1 rounded text-xs ${
+                      className={`px-2 py-1 rounded ${
                         l.status === "error"
                           ? "bg-red-100 text-red-800"
                           : l.status === "completed"
                           ? "bg-green-100 text-green-800"
-                          : l.status === "retry"
-                          ? "bg-yellow-100 text-yellow-800"
-                          : l.type === "execution_started"
-                          ? "bg-purple-100 text-purple-800"
-                          : l.type === "execution_finished"
-                          ? "bg-indigo-100 text-indigo-800"
                           : "bg-blue-100 text-blue-800"
                       }`}
                     >
                       {l.status || l.type || "log"}
                     </span>
                     <span className="text-gray-700">
-                      {l.node_id && `Node: ${l.node_id}`}
+                      {l.node_id && `Step: ${l.node_id}`}
                       {l.message && ` - ${l.message}`}
-                      {l.execution_id && ` (Exec: ${l.execution_id})`}
                     </span>
                   </div>
                 ))}
@@ -1008,70 +1268,70 @@ export default function Builder() {
             )}
           </div>
         </div>
-      </div>
 
-      {/* Trigger Editor Modal */}
-      {showTriggerEditor && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold mb-4">Add Trigger</h3>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium">Event</label>
-                <input
-                  className="w-full border p-2 rounded"
-                  placeholder="e.g., ticket.created"
-                  value={triggerEvent}
-                  onChange={(e) => setTriggerEvent(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium">
-                  Condition (JSON)
-                </label>
-                <textarea
-                  className="w-full border p-2 rounded h-20 text-xs"
-                  placeholder='{"op": "eq", "path": "ticket_assigned", "value": false}'
-                  value={triggerCondition}
-                  onChange={(e) => setTriggerCondition(e.target.value)}
-                />
-              </div>
-              <div className="flex gap-2">
-                <button
-                  className="px-4 py-2 bg-blue-600 text-white rounded"
-                  onClick={() => {
-                    try {
-                      const condition = JSON.parse(triggerCondition || "{}");
-                      const newTrigger = {
-                        event: triggerEvent,
-                        condition: condition,
-                      };
-                      setTriggers([...triggers, newTrigger]);
+        {/* Trigger Editor Modal */}
+        {showTriggerEditor && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded-lg max-w-md w-full mx-4">
+              <h3 className="text-lg font-semibold mb-4">Add Trigger</h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium">Event</label>
+                  <input
+                    className="w-full border p-2 rounded"
+                    placeholder="e.g., ticket.created"
+                    value={triggerEvent}
+                    onChange={(e) => setTriggerEvent(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium">
+                    Condition (JSON)
+                  </label>
+                  <textarea
+                    className="w-full border p-2 rounded h-20 text-xs"
+                    placeholder='{"op": "eq", "path": "ticket_assigned", "value": false}'
+                    value={triggerCondition}
+                    onChange={(e) => setTriggerCondition(e.target.value)}
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    className="px-4 py-2 bg-blue-600 text-white rounded"
+                    onClick={() => {
+                      try {
+                        const condition = JSON.parse(triggerCondition || "{}");
+                        const newTrigger = {
+                          event: triggerEvent,
+                          condition: condition,
+                        };
+                        setTriggers([...triggers, newTrigger]);
+                        setTriggerEvent("");
+                        setTriggerCondition("{}");
+                        setShowTriggerEditor(false);
+                      } catch (e) {
+                        alert("Invalid JSON condition");
+                      }
+                    }}
+                  >
+                    Add
+                  </button>
+                  <button
+                    className="px-4 py-2 bg-gray-300 text-gray-700 rounded"
+                    onClick={() => {
                       setTriggerEvent("");
                       setTriggerCondition("{}");
                       setShowTriggerEditor(false);
-                    } catch (e) {
-                      alert("Invalid JSON condition");
-                    }
-                  }}
-                >
-                  Add
-                </button>
-                <button
-                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded"
-                  onClick={() => {
-                    setTriggerEvent("");
-                    setTriggerCondition("{}");
-                    setShowTriggerEditor(false);
-                  }}
-                >
-                  Cancel
-                </button>
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </ErrorBoundary>
   );
 }

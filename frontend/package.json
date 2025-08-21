@@ -10,28 +10,29 @@
     "eject": "react-scripts eject"
   },
   "dependencies": {
-    "axios": "^1.7.5",
+    "@xyflow/react": "^12.8.3",
+    "ably": "^2.11.0",
+    "axios": "^1.11.0",
     "jwt-decode": "^4.0.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-router-dom": "^6.26.1",
-    "zustand": "^4.5.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.30.1",
     "react-scripts": "^5.0.1",
-    "@xyflow/react": "^12.0.0"
+    "zustand": "^4.5.7"
   },
   "devDependencies": {
-    "@testing-library/jest-dom": "^6.4.8",
+    "@testing-library/jest-dom": "^6.7.0",
     "@testing-library/react": "^14.3.1",
-    "@types/jest": "^29.5.12",
-    "@types/node": "^20.14.10",
-    "@types/react": "^18.3.3",
-    "@types/react-dom": "^18.3.0",
-    "autoprefixer": "^10.4.19",
-    "jsdom": "^24.1.0",
-    "postcss": "^8.4.39",
-    "tailwindcss": "^3.4.10",
-    "typescript": "^4.9.5",
-    "identity-obj-proxy": "^3.0.0"
+    "@types/jest": "^29.5.14",
+    "@types/node": "^20.19.11",
+    "@types/react": "^18.3.23",
+    "@types/react-dom": "^18.3.7",
+    "autoprefixer": "^10.4.21",
+    "identity-obj-proxy": "^3.0.0",
+    "jsdom": "^24.1.3",
+    "postcss": "^8.4.31",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^4.9.5"
   },
   "browserslist": {
     "production": [
@@ -44,5 +45,9 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "overrides": {
+    "nth-check": "^2.0.1",
+    "webpack-dev-server": "^4.15.1"
   }
 }

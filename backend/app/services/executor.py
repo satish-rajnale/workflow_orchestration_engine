@@ -1,97 +1,117 @@
 import asyncio
+import json
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Callable
-from sqlalchemy.orm import Session
-from ..models import Execution, ExecutionLog, Workflow
-from .cache import cache
-from .conditions import evaluate_condition
-from .actions import registry
-
+from typing import Dict, Any, Optional
+from .scheduler import job_scheduler
+from .email import email_service
+from .actions import handle_email, handle_delay, handle_http_request
+from ..models import Workflow, Execution
 
 class WorkflowExecutor:
-    def __init__(
-        self,
-        db: Session,
-        workflow: Workflow,
-        execution: Execution,
-        ws_broadcast: Optional[Callable[[int, Dict[str, Any]], Any]] = None,
-        initial_context: Optional[Dict[str, Any]] = None,
-    ) -> None:
-        self.db = db
-        self.workflow = workflow
-        self.execution = execution
-        self.ws_broadcast = ws_broadcast
-        self.context: Dict[str, Any] = initial_context.copy() if initial_context else {}
-
-    async def run(self) -> None:
-        self.execution.status = 'running'
-        self.execution.started_at = datetime.utcnow()
-        self.db.add(self.execution)
-        self.db.commit()
-        self.db.refresh(self.execution)
-        await self._notify({"type": "execution_started", "execution_id": self.execution.id})
-
+    def __init__(self):
+        self.executions: Dict[str, Dict[str, Any]] = {}
+    
+    async def execute_workflow(self, workflow_id: int, payload: Dict[str, Any] = None, user_id: Optional[str] = None) -> str:
+        """Execute a workflow"""
+        execution_id = f"exec_{workflow_id}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+        
+        # Create execution record
+        execution = {
+            'id': execution_id,
+            'workflow_id': workflow_id,
+            'status': 'running',
+            'started_at': datetime.utcnow().isoformat(),
+            'payload': payload or {},
+            'steps': [],
+            'user_id': user_id
+        }
+        
+        self.executions[execution_id] = execution
+        
+        # Schedule the execution as a background job
+        await job_scheduler.schedule_workflow_execution(
+            workflow_id=workflow_id,
+            execution_id=execution_id,
+            user_id=user_id
+        )
+        
+        return execution_id
+    
+    async def execute_step(self, step: Dict[str, Any], context: Dict[str, Any], user_id: Optional[str] = None) -> Dict[str, Any]:
+        """Execute a single workflow step"""
+        step_id = step.get('id', 'unknown')
+        action = step.get('action', 'notify')
+        params = step.get('params', {})
+        
+        # Add step to execution context
+        context['current_step'] = step_id
+        context['step_params'] = params
+        
         try:
-            nodes: List[Dict[str, Any]] = self.workflow.definition.get('nodes', [])
-            edges: List[Dict[str, Any]] = self.workflow.definition.get('edges', [])
-            node_map = {n['id']: n for n in nodes}
+            # Execute based on action type
+            if action == 'email':
+                result = await handle_email(params, context)
+                # Schedule email as background job
+                await job_scheduler.schedule_email_send(
+                    email_data={
+                        'to': params.get('to'),
+                        'subject': params.get('subject'),
+                        'body': params.get('body'),
+                        'execution_id': context.get('execution_id'),
+                        'step_id': step_id
+                    },
+                    user_id=user_id
+                )
+                return result
+                
+            elif action == 'delay':
+                # Schedule delay as background job
+                delay_seconds = params.get('seconds', 5)
+                await job_scheduler.schedule_job(
+                    job_type='delay',
+                    scheduled_at=datetime.utcnow(),
+                    function=handle_delay,
+                    args=[delay_seconds],
+                    user_id=user_id
+                )
+                return {'status': 'scheduled', 'delay_seconds': delay_seconds}
+                
+            elif action == 'http_request':
+                # Schedule HTTP request as background job
+                await job_scheduler.schedule_job(
+                    job_type='http_request',
+                    scheduled_at=datetime.utcnow(),
+                    function=handle_http_request,
+                    args=[params, context],
+                    user_id=user_id
+                )
+                return {'status': 'scheduled', 'url': params.get('url')}
+                
+            else:
+                # Default notification action
+                return {
+                    'status': 'completed',
+                    'message': f'Executed {action} for step {step_id}',
+                    'step_id': step_id
+                }
+                
+        except Exception as e:
+            return {
+                'status': 'failed',
+                'error': str(e),
+                'step_id': step_id
+            }
+    
+    async def get_execution_status(self, execution_id: str) -> Optional[Dict[str, Any]]:
+        """Get execution status"""
+        return self.executions.get(execution_id)
+    
+    async def get_execution_history(self, workflow_id: int) -> list:
+        """Get execution history for a workflow"""
+        return [
+            execution for execution in self.executions.values()
+            if execution['workflow_id'] == workflow_id
+        ]
 
-            start_nodes = [n for n in nodes if n.get('type') == 'start'] or nodes[:1]
-            for start in start_nodes:
-                await self._execute_node(start, node_map, edges)
-
-            self.execution.status = 'succeeded'
-        except Exception as exc:
-            self.execution.status = 'failed'
-            await self._log(node_id='engine', status='error', message=str(exc))
-        finally:
-            self.execution.finished_at = datetime.utcnow()
-            self.db.add(self.execution)
-            self.db.commit()
-            await self._notify({"type": "execution_finished", "execution_id": self.execution.id, "status": self.execution.status})
-            cache.set_json(f"workflow:{self.workflow.id}:last_execution", {"id": self.execution.id, "status": self.execution.status})
-
-    async def _execute_node(self, node: Dict[str, Any], node_map: Dict[str, Dict[str, Any]], edges: List[Dict[str, Any]]) -> None:
-        node_id = node['id']
-        action = node.get('action')
-        params = node.get('params', {})
-        await self._log(node_id=node_id, status='started', message=f"Node {action} started")
-        await self._notify({"type": "node_started", "node_id": node_id, "action": action})
-
-        handler = registry.get(action or 'noop')
-        tries = int(node.get('retries', 0)) + 1
-        last_exc: Optional[Exception] = None
-        for attempt in range(1, tries + 1):
-            try:
-                if handler:
-                    await handler(params, self.context)
-                break
-            except Exception as exc:  # retry with backoff
-                last_exc = exc
-                await self._log(node_id=node_id, status='retry', message=f'Retry {attempt} failed: {exc}')
-                await asyncio.sleep(min(2 ** attempt, 10))
-        else:
-            raise last_exc if last_exc else Exception('Unknown action failure')
-
-        await self._log(node_id=node_id, status='completed', message=f"Node {action} completed")
-        await self._notify({"type": "node_completed", "node_id": node_id})
-
-        next_edges = [e for e in edges if e.get('source') == node_id]
-        for edge in next_edges:
-            target_id = edge.get('target')
-            condition = edge.get('condition')
-            if condition and not evaluate_condition(condition, context={"data": self.context, "params": params}):
-                continue
-            target_node = node_map.get(target_id)
-            if target_node:
-                await self._execute_node(target_node, node_map, edges)
-
-    async def _log(self, node_id: str, status: str, message: str | None = None) -> None:
-        log = ExecutionLog(execution_id=self.execution.id, node_id=node_id, status=status, message=message)
-        self.db.add(log)
-        self.db.commit()
-        await self._notify({"type": "log", "node_id": node_id, "status": status, "message": message})
-
-    async def _notify(self, event: Dict[str, Any]) -> None:
-        if self.ws_broadcast:
-            await self.ws_broadcast(self.workflow.id, event)
+# Global executor instance
+workflow_executor = WorkflowExecutor()

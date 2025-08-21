@@ -9,7 +9,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def create_access_token(subject: int, expires_minutes: int | None = None) -> str:
     expire = datetime.utcnow() + timedelta(minutes=expires_minutes or Settings.access_token_expire_minutes)
-    to_encode: Dict[str, Any] = {"sub": subject, "exp": expire}
+    to_encode: Dict[str, Any] = {"sub": str(subject), "exp": expire}
     return jwt.encode(to_encode, Settings.jwt_secret_key, algorithm=Settings.jwt_algorithm)
 
 
