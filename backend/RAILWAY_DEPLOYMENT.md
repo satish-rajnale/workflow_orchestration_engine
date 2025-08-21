@@ -15,8 +15,7 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "uvicorn app.main:app --host 0.0.0.0 --port $PORT",
-    "healthcheckPath": "/health",
+    "startCommand": "python start.py",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 3
   }
@@ -25,7 +24,19 @@
 
 ### **2. Procfile** ✅
 ```
-web: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+web: python start.py
+```
+
+### **3. start.py** ✅
+```python
+#!/usr/bin/env python3
+import os
+import uvicorn
+
+if __name__ == "__main__":
+    port = int(os.getenv("PORT", 8000))
+    print(f"🚀 Starting Workflow Orchestration Engine on port {port}")
+    uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=False)
 ```
 
 ### **3. runtime.txt** ✅
@@ -35,7 +46,7 @@ python-3.11.7
 
 ### **4. Dockerfile** ✅
 - Updated for Railway deployment
-- Uses `$PORT` environment variable
+- Uses `start.py` script for proper port handling
 - Includes health checks
 - Non-root user for security
 
@@ -201,8 +212,9 @@ async def health_check():
 ### **Common Issues:**
 
 1. **Port Issues**
-   - Ensure using `$PORT` environment variable
-   - Check `railway.json` start command
+   - ✅ **FIXED**: Using `start.py` script to properly handle `$PORT` environment variable
+   - The script converts the port to an integer and provides a default fallback
+   - Check `railway.json` start command uses `python start.py`
 
 2. **Database Connection**
    - Verify `DATABASE_URL` is correct

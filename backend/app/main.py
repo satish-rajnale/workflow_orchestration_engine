@@ -5,13 +5,15 @@ from .db import engine, Base
 from .services.scheduler import job_scheduler
 from .services.email_monitor import email_monitor
 from .services.ably_service import AblyService
+from .config import Settings
+
 
 app = FastAPI(title="Workflow Orchestration Engine", version="1.0.0")
 
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=Settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

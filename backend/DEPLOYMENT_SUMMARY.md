@@ -52,8 +52,7 @@ cors_origins: List[str] = os.getenv("CORS_ORIGINS", "...").split(",")
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "uvicorn app.main:app --host 0.0.0.0 --port $PORT",
-    "healthcheckPath": "/health",
+    "startCommand": "python start.py",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 3
   }
@@ -62,7 +61,7 @@ cors_origins: List[str] = os.getenv("CORS_ORIGINS", "...").split(",")
 
 ### **Enhanced Dockerfile**
 
-- Uses `$PORT` environment variable
+- Uses `start.py` script for proper port handling
 - Includes health checks
 - Non-root user for security
 - Better layer caching
