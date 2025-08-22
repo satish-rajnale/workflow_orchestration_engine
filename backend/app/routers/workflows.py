@@ -27,39 +27,7 @@ def create_workflow(payload: WorkflowCreate, db: Session = Depends(get_db), curr
 @router.get('/samples')
 def get_samples():
     return [
-        {
-            "name": "Lead Nurture",
-            "definition": {
-                "nodes": [
-                    {"id": "start-1", "type": "start", "action": "start", "params": {}, "position": {"x": 100, "y": 100}},
-                    {"id": "delay-1", "type": "action", "action": "delay", "params": {"seconds": 5}, "position": {"x": 350, "y": 100}},
-                    {"id": "notify-1", "type": "action", "action": "notify", "params": {"message": "Thanks for signing up"}, "position": {"x": 650, "y": 100}}
-                ],
-                "edges": [
-                    {"source": "start-1", "target": "delay-1"},
-                    {"source": "delay-1", "target": "notify-1"}
-                ]
-            }
-        },
-        {
-            "name": "Temperature Control",
-            "definition": {
-                "nodes": [
-                    {"id": "start-2", "type": "start", "action": "start", "params": {}, "position": {"x": 100, "y": 250}},
-                    {"id": "http-1", "type": "action", "action": "http_request", "params": {"url": "mock://sensor"}, "position": {"x": 340, "y": 250}},
-                    {"id": "branch-1", "type": "action", "action": "branch", "params": {}, "position": {"x": 570, "y": 250}},
-                    {"id": "notify-2", "type": "action", "action": "notify", "params": {"message": "Cooling on"}, "position": {"x": 400, "y": 500}},
-                    {"id": "notify-3", "type": "action", "action": "notify", "params": {"message": "Cooling off"}, "position": {"x": 700, "y": 500}}
-                ],
-                "edges": [
-                    {"source": "start-2", "target": "http-1"},
-                    {"source": "http-1", "target": "branch-1"},
-                    {"source": "branch-1", "target": "notify-2", "condition": {"value": True}},
-                    {"source": "branch-1", "target": "notify-3", "condition": {"value": False}}
-                ]
-            }
-        },
-        {
+       {
             "name": "Support Ticket Auto-Responder",
             "definition": {
                 "triggers": [

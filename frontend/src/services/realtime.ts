@@ -17,7 +17,6 @@ class RealtimeService {
       // Initialize Ably with token
       this.ably = new Ably.Realtime({
         authCallback: async (tokenParams, callback) => {
-          console.log("🔐 Ably auth callback called");
           return callback(null, tokenRequest);
         },
       });

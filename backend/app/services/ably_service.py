@@ -9,7 +9,7 @@ class AblyService:
     @staticmethod
     async def init_ably_client():
         """Initialize Ably realtime client"""
-        ably_key = os.getenv('ABLY_REALTIME_KEY', '7ENjmw.aNL0ng:jkHFUSMcrAuWwzJcOXRyDyV-dvcIZP5XCfy4OG_D-gA')
+        ably_key = os.getenv('ABLY_REALTIME_KEY')
         if ably_key:
             try:
                 client = AblyRealtime(ably_key)

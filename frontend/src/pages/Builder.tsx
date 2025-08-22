@@ -276,8 +276,6 @@ export default function Builder() {
   const [message, setMessage] = useState<string | null>(null);
   const { user } = useAuth();
 
-  console.log("user", user);
-
   useEffect(() => {
     if (!workflowId) return;
     (async () => {
@@ -311,11 +309,25 @@ export default function Builder() {
   }, [workflowId]);
 
   const handleStepNameChange = (stepId: string, newName: string) => {
+    if (!selectedStep) return;
+    setSelectedStep({
+      ...selectedStep,
+      id: newName,
+      data: {
+        ...selectedStep.data,
+        label: newName,
+        step: {
+          ...selectedStep.data.step,
+          id: newName,
+        },
+      },
+    });
     setNodes((ns: any) =>
       (ns as any[]).map((n: any) =>
         n.id === stepId
           ? {
               ...n,
+              id: newName,
               data: {
                 ...n.data,
                 label: newName,
@@ -328,28 +340,57 @@ export default function Builder() {
           : n
       )
     );
+    console.log("edges", edges, stepId, newName);
+    console.log("edgetobemapped", edges.map((e: any) => e.source === stepId ? { ...e, source: newName } : e));
+    setEdges((es: any) =>
+      (es as any[]).map((e: any) =>
+        e.source === stepId ? { ...e, source: newName } : e.target === stepId ? { ...e, target: newName } : e
+      )
+    );
   };
 
   const updateStepParams = (stepId: string, params: any) => {
     console.log("updateStepParams", stepId, params);
+    setSelectedStep({
+      ...selectedStep,
+      data: {
+        ...selectedStep.data,
+        step: {
+          ...selectedStep.data.step,
+          params: {
+            ...selectedStep.data.step?.params,
+            ...params,
+          },
+        },
+      },
+    });
     setNodes((ns: any) =>
-      (ns as any[]).map((n: any) =>
-        n.id === stepId
-          ? {
-              ...n,
-              data: {
-                ...n.data,
-                step: {
-                  ...n.data.step,
-                  params: {
-                    ...n.data.step?.params,
-                    ...params,
-                  },
+      (ns as any[]).map((n: any) => {
+        if (n.id === stepId) {
+          console.log("calculated params", {
+            ...n.data.step,
+            params: {
+              ...n.data.step?.params,
+              ...params,
+            },
+          });
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              step: {
+                ...n.data.step,
+                params: {
+                  ...n.data.step?.params,
+                  ...params,
                 },
               },
-            }
-          : n
-      )
+            },
+          };
+        }
+
+        return n;
+      })
     );
   };
 
@@ -507,6 +548,7 @@ export default function Builder() {
     };
     setTestPayload(JSON.stringify(samplePayload, null, 2));
   };
+  console.log("nodes", nodes, selectedStep);
 
   return (
     <ErrorBoundary>
@@ -580,18 +622,6 @@ export default function Builder() {
                 Sample Workflows
               </h3>
               <div className="space-y-2">
-                <button
-                  className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg"
-                  onClick={() => loadSample("Lead Nurture")}
-                >
-                  Lead Nurture
-                </button>
-                <button
-                  className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg"
-                  onClick={() => loadSample("Temperature Control")}
-                >
-                  Temperature Control
-                </button>
                 <button
                   className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg"
                   onClick={() => loadSample("Support Ticket Auto-Responder")}
@@ -732,7 +762,6 @@ export default function Builder() {
               </div>
             </div>
           </div>
-
           {/* Main Canvas */}
           <div className="flex-1">
             <ReactFlow
@@ -742,8 +771,13 @@ export default function Builder() {
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
               onSelectionChange={(sel: any) => {
-                setSelectedStep(sel.nodes?.[0] || null);
-                setSelectedEdge(sel.edges?.[0] || null);
+                console.log("selectio changes");
+                if (sel.nodes?.[0] && sel.nodes?.[0].id !== selectedStep?.id) {
+                  setSelectedStep(sel.nodes?.[0] || null);
+                  setSelectedEdge(sel.edges?.[0] || null);
+
+                  console.log("selected step", sel.nodes?.[0]);
+                }
               }}
               nodeTypes={nodeTypes}
               fitView
@@ -752,7 +786,6 @@ export default function Builder() {
               <Controls />
             </ReactFlow>
           </div>
-
           {/* Right Sidebar */}
           <div className="w-80 bg-white border-l border-gray-200 p-4">
             {selectedStep ? (
@@ -779,11 +812,23 @@ export default function Builder() {
                     </label>
                     <select
                       className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                      disabled={true}
                       value={
                         selectedStep.data.step?.action ||
                         selectedStep.data.action
                       }
                       onChange={(e) => {
+                        setSelectedStep({
+                          ...selectedStep,
+                          data: {
+                            ...selectedStep.data,
+                            step: {
+                              ...selectedStep.data.step,
+                              action: e.target.value,
+                            },
+                            action: e.target.value,
+                          },
+                        });
                         setNodes((ns) =>
                           ns.map((n) =>
                             n.id === selectedStep.id
@@ -814,25 +859,49 @@ export default function Builder() {
                       </option>
                     </select>
                   </div>
-                  ;{/* Step-specific configuration */}
-                  {(selectedStep.data.step?.action ||
-                    selectedStep.data.action) === "delay" ? (
-                    <div className="space-y-3">
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                          Delay (seconds)
-                        </label>
-                        <input
-                          type="number"
-                          min="1"
-                          className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          value={selectedStep.data.step?.params?.seconds || 5}
-                          onChange={(e) => {
-                            const seconds = parseInt(e.target.value) || 5;
-                            setNodes((ns) =>
-                              ns.map((n) =>
-                                n.id === selectedStep.id
-                                  ? {
+                  {
+                    /* Step-specific configuration */
+                  }
+                  {
+                    (selectedStep.data.step?.action ||
+                      selectedStep.data.action) === "delay" ? (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Delay (seconds)
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            value={selectedStep.data.step?.params?.seconds || 5}
+                            onChange={(e) => {
+                              const seconds = parseInt(e.target.value) || 1;
+                              console.log("seconds", seconds);
+                              setSelectedStep({
+                                ...selectedStep,
+                                data: {
+                                  ...selectedStep.data,
+                                  step: {
+                                    ...selectedStep.data.step,
+                                    params: {
+                                      ...selectedStep.data.step?.params,
+                                      seconds,
+                                    },
+                                  },
+                                },
+                              });
+                              setNodes((ns) =>
+                                ns.map((n) => {
+                                  if (n.id === selectedStep.id) {
+                                    console.log("calculated params", {
+                                      ...n.data.step,
+                                      params: {
+                                        ...n.data.step?.params,
+                                        seconds,
+                                      },
+                                    });
+                                    return {
                                       ...n,
                                       data: {
                                         ...n.data,
@@ -844,265 +913,179 @@ export default function Builder() {
                                           },
                                         },
                                       },
-                                    }
-                                  : n
-                              )
-                            );
-                          }}
-                          placeholder="5"
-                        />
+                                    };
+                                  }
+                                  return n;
+                                })
+                              );
+                            }}
+                            placeholder="5"
+                          />
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          Delay execution for the specified number of seconds
+                        </div>
                       </div>
-                      <div className="text-xs text-gray-500">
-                        Delay execution for the specified number of seconds
-                      </div>
-                    </div>
-                  ) : null}
-                  {(selectedStep.data.step?.action ||
-                    selectedStep.data.action) === "email" && (
-                    <div className="space-y-3">
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                          To Email
-                        </label>
-                        <input
-                          type="email"
-                          className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          value={selectedStep.data.step?.params?.to || ""}
-                          onChange={(e) =>
-                            updateStepParams(selectedStep.id, {
-                              to: e.target.value,
-                            })
-                          }
-                          placeholder="Enter email address"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                          Subject
-                        </label>
-                        <input
-                          type="text"
-                          className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          value={selectedStep.data.step?.params?.subject || ""}
-                          onChange={(e) =>
-                            setNodes((ns) =>
-                              ns.map((n) =>
-                                n.id === selectedStep.id
-                                  ? {
-                                      ...n,
-                                      data: {
-                                        ...n.data,
-                                        step: {
-                                          ...n.data.step,
-                                          params: {
-                                            ...n.data.step?.params,
-                                            subject: e.target.value,
-                                          },
-                                        },
-                                      },
-                                    }
-                                  : n
-                              )
-                            )
-                          }
-                          placeholder="Enter email subject"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                          Body
-                        </label>
-                        <textarea
-                          className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          value={selectedStep.data.step?.params?.body || ""}
-                          onChange={(e) =>
-                            setNodes((ns) =>
-                              ns.map((n) =>
-                                n.id === selectedStep.id
-                                  ? {
-                                      ...n,
-                                      data: {
-                                        ...n.data,
-                                        step: {
-                                          ...n.data.step,
-                                          params: {
-                                            ...n.data.step?.params,
-                                            body: e.target.value,
-                                          },
-                                        },
-                                      },
-                                    }
-                                  : n
-                              )
-                            )
-                          }
-                          placeholder="Enter email body"
-                          rows={3}
-                        />
-                      </div>
+                    ) : null
+                  }
+                  {
+                    (selectedStep.data.step?.action ||
+                      selectedStep.data.action) === "email" && (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            To Email
+                          </label>
+                          <input
+                            type="email"
+                            className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            value={selectedStep.data.step?.params?.to || ""}
+                            onChange={(e) =>
+                              updateStepParams(selectedStep.id, {
+                                to: e.target.value,
+                              })
+                            }
+                            placeholder="Enter email address"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Subject
+                          </label>
+                          <input
+                            type="text"
+                            className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            value={
+                              selectedStep.data.step?.params?.subject || ""
+                            }
+                            onChange={(e) =>
+                              updateStepParams(selectedStep.id, {
+                                subject: e.target.value,
+                              })
+                            }
+                            placeholder="Enter email subject"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Body
+                          </label>
+                          <textarea
+                            className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            value={selectedStep.data.step?.params?.body || ""}
+                            onChange={(e) =>
+                              updateStepParams(selectedStep.id, {
+                                body: e.target.value,
+                              })
+                            }
+                            placeholder="Enter email body"
+                            rows={3}
+                          />
+                        </div>
 
-                      {/* Email Status Component */}
-                      <EmailStatus
-                        emailId={selectedStep.data.step?.params?.last_email_id}
-                        executionId={
-                          selectedStep.data.step?.params?.execution_id
-                        }
-                      />
-                    </div>
-                  )}
-                  {(selectedStep.data.step?.action ||
-                    selectedStep.data.action) === "http_request" && (
-                    <div className="space-y-3">
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                          Method
-                        </label>
-                        <select
-                          className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          value={
-                            selectedStep.data.step?.params?.method || "GET"
+                        {/* Email Status Component */}
+                        <EmailStatus
+                          emailId={
+                            selectedStep.data.step?.params?.last_email_id
                           }
-                          onChange={(e) =>
-                            setNodes((ns) =>
-                              ns.map((n) =>
-                                n.id === selectedStep.id
-                                  ? {
-                                      ...n,
-                                      data: {
-                                        ...n.data,
-                                        step: {
-                                          ...n.data.step,
-                                          params: {
-                                            ...n.data.step?.params,
-                                            method: e.target.value,
-                                          },
-                                        },
-                                      },
-                                    }
-                                  : n
-                              )
-                            )
+                          executionId={
+                            selectedStep.data.step?.params?.execution_id
                           }
-                        >
-                          <option value="GET">GET</option>
-                          <option value="POST">POST</option>
-                          <option value="PUT">PUT</option>
-                          <option value="DELETE">DELETE</option>
-                          <option value="PATCH">PATCH</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                          URL
-                        </label>
-                        <input
-                          type="url"
-                          className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          value={selectedStep.data.step?.params?.url || ""}
-                          onChange={(e) =>
-                            setNodes((ns) =>
-                              ns.map((n) =>
-                                n.id === selectedStep.id
-                                  ? {
-                                      ...n,
-                                      data: {
-                                        ...n.data,
-                                        step: {
-                                          ...n.data.step,
-                                          params: {
-                                            ...n.data.step?.params,
-                                            url: e.target.value,
-                                          },
-                                        },
-                                      },
-                                    }
-                                  : n
-                              )
-                            )
-                          }
-                          placeholder="https://api.example.com/endpoint"
                         />
                       </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                          Headers (JSON)
-                        </label>
-                        <textarea
-                          className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
-                          value={JSON.stringify(
-                            selectedStep.data.step?.params?.headers || {},
-                            null,
-                            2
-                          )}
-                          onChange={(e) => {
-                            try {
-                              const headers = JSON.parse(e.target.value);
-                              setNodes((ns) =>
-                                ns.map((n) =>
-                                  n.id === selectedStep.id
-                                    ? {
-                                        ...n,
-                                        data: {
-                                          ...n.data,
-                                          step: {
-                                            ...n.data.step,
-                                            params: {
-                                              ...n.data.step?.params,
-                                              headers,
-                                            },
-                                          },
-                                        },
-                                      }
-                                    : n
-                                )
-                              );
-                            } catch {}
-                          }}
-                          placeholder='{"Content-Type": "application/json"}'
-                          rows={3}
-                        />
+                    )
+                  }
+                  {
+                    (selectedStep.data.step?.action ||
+                      selectedStep.data.action) === "http_request" && (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Method
+                          </label>
+                          <select
+                            className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            value={
+                              selectedStep.data.step?.params?.method || "GET"
+                            }
+                            onChange={(e) => {
+                              updateStepParams(selectedStep.id, {
+                                method: e.target.value,
+                              });
+                            }}
+                          >
+                            <option value="GET">GET</option>
+                            <option value="POST">POST</option>
+                            <option value="PUT">PUT</option>
+                            <option value="DELETE">DELETE</option>
+                            <option value="PATCH">PATCH</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            URL
+                          </label>
+                          <input
+                            type="url"
+                            className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            value={selectedStep.data.step?.params?.url || ""}
+                            onChange={(e) => {
+                              updateStepParams(selectedStep.id, {
+                                url: e.target.value,
+                              });
+                            }}
+                            placeholder="https://api.example.com/endpoint"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Headers (JSON)
+                          </label>
+                          <textarea
+                            className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                            value={JSON.stringify(
+                              selectedStep.data.step?.params?.headers || {},
+                              null,
+                              2
+                            )}
+                            onChange={(e) => {
+                              try {
+                                const headers = JSON.parse(e.target.value);
+                                updateStepParams(selectedStep.id, {
+                                  headers: headers,
+                                });
+                              } catch {}
+                            }}
+                            placeholder='{"Content-Type": "application/json"}'
+                            rows={3}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Body (JSON)
+                          </label>
+                          <textarea
+                            className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                            value={JSON.stringify(
+                              selectedStep.data.step?.params?.body || {},
+                              null,
+                              2
+                            )}
+                            onChange={(e) => {
+                              try {
+                                const body = JSON.parse(e.target.value);
+                                updateStepParams(selectedStep.id, {
+                                  body: body,
+                                });
+                              } catch {}
+                            }}
+                            placeholder='{"key": "value"}'
+                            rows={3}
+                          />
+                        </div>
                       </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                          Body (JSON)
-                        </label>
-                        <textarea
-                          className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
-                          value={JSON.stringify(
-                            selectedStep.data.step?.params?.body || {},
-                            null,
-                            2
-                          )}
-                          onChange={(e) => {
-                            try {
-                              const body = JSON.parse(e.target.value);
-                              setNodes((ns) =>
-                                ns.map((n) =>
-                                  n.id === selectedStep.id
-                                    ? {
-                                        ...n,
-                                        data: {
-                                          ...n.data,
-                                          step: {
-                                            ...n.data.step,
-                                            params: {
-                                              ...n.data.step?.params,
-                                              body,
-                                            },
-                                          },
-                                        },
-                                      }
-                                    : n
-                                )
-                              );
-                            } catch {}
-                          }}
-                          placeholder='{"key": "value"}'
-                          rows={3}
-                        />
-                      </div>
-                    </div>
-                  )}
+                    )
+                  }
                   {(selectedStep.data.step?.action ||
                     selectedStep.data.action) === "notify" && (
                     <div className="space-y-3">
@@ -1114,25 +1097,9 @@ export default function Builder() {
                           className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                           value={selectedStep.data.step?.params?.message || ""}
                           onChange={(e) =>
-                            setNodes((ns) =>
-                              ns.map((n) =>
-                                n.id === selectedStep.id
-                                  ? {
-                                      ...n,
-                                      data: {
-                                        ...n.data,
-                                        step: {
-                                          ...n.data.step,
-                                          params: {
-                                            ...n.data.step?.params,
-                                            message: e.target.value,
-                                          },
-                                        },
-                                      },
-                                    }
-                                  : n
-                              )
-                            )
+                            updateStepParams(selectedStep.id, {
+                              message: e.target.value,
+                            })
                           }
                           placeholder="Enter notification message"
                           rows={3}
@@ -1182,7 +1149,7 @@ export default function Builder() {
                   </div>
                 </div>
               </div>
-            ) : (
+            ) : null}
               <div>
                 <h3 className="text-sm font-medium text-gray-900 mb-4">
                   Workflow Status
@@ -1214,7 +1181,6 @@ export default function Builder() {
                   userId={user?.id?.toString()}
                 />
               </div>
-            )}
           </div>
         </div>
 
